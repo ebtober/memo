@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>我的待办记事本</title>
+  <style>
+    :root {
+      --bg: #FFD1DC;
+      --card-bg: rgba(255, 255, 255, 0.86);
+      --text: #333;
+      --muted: #888;
+      --accent: #ff6b8a;
+      --radius: 16px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 720px;
+      background: var(--card-bg);
+      border-radius: calc(var(--radius) + 8px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      padding: 24px;
+      backdrop-filter: saturate(1.2) blur(2px);
+    }
+
+    h1 {
+      margin: 0 0 12px 0;
+      font-size: 28px;
+      letter-spacing: .5px;
+    }
+
+    .hint {
+      margin: 0 0 20px 0;
+      color: #555;
+      font-size: 14px;
+    }
+
+    .new-todo {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .input {
+      flex: 1;
+      padding: 12px 14px;
+      border: 1.5px solid #e9a8b6;
+      background: rgba(255,255,255,0.9);
+      border-radius: var(--radius);
+      outline: none;
+      font-size: 16px;
+    }
+    .input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(255,107,138,0.15); }
+
+    .btn {
+      padding: 12px 16px;
+      border: none;
+      border-radius: var(--radius);
+      background: var(--accent);
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      transition: transform .06s ease, filter .2s ease;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn:disabled { opacity: .55; cursor: not-allowed; }
+
+    .list {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: var(--radius);
+      background: var(--card-bg); /* 半透明矩形框 */
+      border: 1px solid rgba(0,0,0,0.06);
+    }
+
+    /* 自定义方形复选框 */
+    .todo-checkbox {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #e28ea1;
+      border-radius: 4px; /* 方形但略微圆润 */
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      background: #fff;
+      flex: 0 0 20px;
+    }
+    .todo-checkbox:focus { outline: none; box-shadow: 0 0 0 3px rgba(255,107,138,0.2); }
+    .todo-checkbox:checked {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .todo-checkbox:checked::after {
+      content: "";
+      width: 10px; height: 10px;
+      clip-path: polygon(14% 52%, 0 66%, 44% 100%, 100% 22%, 86% 10%, 44% 72%);
+      background: #fff;
+      display: block;
+    }
+
+    .todo-text {
+      flex: 1;
+      font-size: 16px;
+      line-height: 1.4;
+      word-break: break-word;
+      transition: color .2s ease, text-decoration-color .2s ease, opacity .2s ease;
+    }
+
+    /* 打勾后划线 + 灰色 */
+    .todo-checkbox:checked + .todo-text {
+      text-decoration: line-through;
+      text-decoration-thickness: 2px;
+      text-decoration-color: rgba(0,0,0,0.35);
+      color: var(--muted);
+    }
+
+    .empty {
+      text-align: center;
+      color: #666;
+      padding: 12px 0 2px;
+      font-size: 14px;
+    }
+
+    .footer {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #666;
+      text-align: right;
+    }
+    .footer button {
+      background: transparent;
+      border: none;
+      color: #a44e61;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="app" role="application" aria-label="待办记事本">
+    <h1>待办记事本</h1>
+    <p class="hint">输入事项，按下 <kbd>Enter</kbd> 或点击“添加”即可新建；勾选可划线并变灰，再次取消即可恢复。</p>
+
+    <form class="new-todo" id="todo-form" autocomplete="off">
+      <input id="todo-input" class="input" type="text" placeholder="例如：买牛奶、完成作业…" aria-label="新待办内容" />
+      <button class="btn" id="add-btn" type="submit" aria-label="添加待办">添加</button>
+    </form>
+
+    <ul class="list" id="list" aria-live="polite"></ul>
+    <div class="empty" id="empty" hidden>还没有待办事项～</div>
+
+    <div class="footer">
+      <button id="clear-done" title="清除已完成">清除已完成</button>
+    </div>
+  </main>
+
+  <script>
+    const listEl = document.getElementById('list');
+    const emptyEl = document.getElementById('empty');
+    const formEl = document.getElementById('todo-form');
+    const inputEl = document.getElementById('todo-input');
+    const clearDoneBtn = document.getElementById('clear-done');
+
+    const STORAGE_KEY = 'notepad_todos_v1';
+
+    /** @type {{id:string,text:string,done:boolean}[]} */
+    let todos = [];
+
+    function uid() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4); }
+
+    function save() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(todos)); } catch (e) { /* ignore */ }
+    }
+
+    function load() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) todos = JSON.parse(raw) || [];
+      } catch (e) { todos = []; }
+    }
+
+    function render() {
+      listEl.innerHTML = '';
+      if (!todos.length) {
+        emptyEl.hidden = false;
+        return;
+      }
+      emptyEl.hidden = true;
+      const frag = document.createDocumentFragment();
+      for (const item of todos) {
+        const li = document.createElement('li');
+        li.className = 'item';
+        li.dataset.id = item.id;
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'todo-checkbox';
+        cb.checked = !!item.done;
+        cb.setAttribute('aria-label', '切换完成');
+
+        const span = document.createElement('span');
+        span.className = 'todo-text';
+        span.textContent = item.text;
+
+        li.appendChild(cb);
+        li.appendChild(span);
+        frag.appendChild(li);
+      }
+      listEl.appendChild(frag);
+    }
+
+    function addTodo(text) {
+      const t = text.trim();
+      if (!t) return;
+      todos.unshift({ id: uid(), text: t, done: false });
+      save();
+      render();
+    }
+
+    function toggleDone(id) {
+      const it = todos.find(x => x.id === id);
+      if (!it) return;
+      it.done = !it.done;
+      save();
+      render();
+    }
+
+    function clearDone() {
+      const before = todos.length;
+      todos = todos.filter(x => !x.done);
+      if (todos.length !== before) {
+        save();
+        render();
+      }
+    }
+
+    // 事件
+    formEl.addEventListener('submit', (e) => {
+      e.preventDefault();
+      addTodo(inputEl.value);
+      inputEl.value = '';
+      inputEl.focus();
+    });
+
+    listEl.addEventListener('change', (e) => {
+      const target = e.target;
+      if (target && target.classList.contains('todo-checkbox')) {
+        const li = target.closest('.item');
+        if (li) toggleDone(li.dataset.id);
+      }
+    });
+
+    // 双击快速编辑（可选小惊喜）
+    listEl.addEventListener('dblclick', (e) => {
+      const li = e.target.closest('.item');
+      if (!li) return;
+      const id = li.dataset.id;
+      const item = todos.find(x => x.id === id);
+      if (!item) return;
+      const newText = prompt('编辑待办：', item.text);
+      if (newText === null) return; // 取消
+      const t = newText.trim();
+      if (!t) return; // 空内容忽略
+      item.text = t;
+      save();
+      render();
+    });
+
+    clearDoneBtn.addEventListener('click', () => clearDone());
+
+    // 初始化
+    load();
+    render();
+
+    // 提升可用性：从系统偏好减少动画时去掉聚焦阴影动画
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    function applyReduced() { document.documentElement.style.setProperty('--transition', media.matches ? '0s' : '.2s'); }
+    media.addEventListener?.('change', applyReduced); applyReduced();
+  </script>
+</body>
+</html>
